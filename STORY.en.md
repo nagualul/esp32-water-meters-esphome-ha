@@ -13,7 +13,6 @@
 - Wiring: each reed between **GPIO** and **GND** (internal pull‑up, `inverted: true`)
 
 ![ESP32‑C3 — photo](images/esp32c3-photo.jpg)
-*Replace with your real picture. File: `images/esp32c3-photo.jpg`*
 
 ![Simplified wiring](images/wiring.png)
 
@@ -33,7 +32,6 @@ File: `homeassistant/packages/apometre_mini.yaml`.
 Two large odometer buttons and two pop‑ups with details including **Live pulse** (binary_sensor), **Total L**, **Total m³**, **L/min**, **Daily/Monthly consumption**, plus **Set odometer** with a single Apply click.
 
 ![Lovelace — Bubble Card](images/bubble-card-photo.jpg)
-*Replace with your own screenshot (`images/bubble-card-photo.jpg`).*
 
 ![Mock dashboard](images/dashboard.png)
 

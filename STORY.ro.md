@@ -13,7 +13,6 @@
 - Cablare: fiecare reed între **GPIO** și **GND** (pull‑up intern, `inverted: true`)
 
 ![ESP32‑C3 — foto](images/esp32c3-photo.jpg)
-*Înlocuiește cu poza ta reală. Fisier: `images/esp32c3-photo.jpg`*
 
 ![Wiring simplificat](images/wiring.png)
 
@@ -33,7 +32,6 @@ Fișierul: `homeassistant/packages/apometre_mini.yaml`.
 Două butoane mari cu odometre și două pop‑up‑uri cu detalii, inclusiv **Impuls live** (binary_sensor), **Total L**, **Total m³**, **L/min**, **Consum azi/lună**, plus **Setare odometru** cu un click pe „Aplică”.
 
 ![Lovelace — Bubble Card](images/bubble-card-photo.jpg)
-*Înlocuiește cu propriul screenshot (`images/bubble-card-photo.jpg`).*
 
 ![Mock dashboard](images/dashboard.png)
 
