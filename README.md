@@ -18,3 +18,8 @@ Images for wiring/UI are under `images/`.
 
 ## License
 MIT — see `LICENSE`.
+
+
+## Story
+- 🇷🇴 [Povestea proiectului](STORY.ro.md)
+- 🇬🇧 [Build story](STORY.en.md)
