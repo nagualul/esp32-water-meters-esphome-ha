@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions — Show and tell
+    url: https://github.com/nagualul/esp32-water-meters-esphome-ha/discussions/new?category=show-and-tell
+    about: Prezintă proiectul și primește feedback
