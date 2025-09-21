@@ -1,0 +1,165 @@
+############################################################
+# ESPHome – ESP32 mini apometre (ID = name, 1:1)
+# - Prefix de nod: apm  -> în HA: sensor.apm_..., binary_sensor.apm_...
+# - Toate entitățile au "id" = "name" (identice) pentru claritate
+# - Totalurile sunt păstrate în "globals" și publicate la boot
+############################################################
+
+esphome:
+  name: apm                              # prefixul pentru entity_id în HA
+  friendly_name: ESP32MiniApometre
+  min_version: 2025.5.0
+  name_add_mac_suffix: false
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          // Publicăm valorile restaurate ca să apară imediat în HA
+          id(apa_rece_total_litri).publish_state(id(total_rece_l));
+          id(apa_rece_total_m3).publish_state(id(total_rece_l) * 0.001f);
+          id(apa_calda_total_litri).publish_state(id(total_calda_l));
+          id(apa_calda_total_m3).publish_state(id(total_calda_l) * 0.001f);
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# Log „curat”; pune temporar INFO dacă debugezi
+logger:
+  level: WARN
+  baud_rate: 0
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  manual_ip:
+      static_ip: 192.168.88.229     # <-- pune o adresă liberă din LAN-ul tău
+      gateway: 192.168.88.2        # <-- gateway-ul tău
+      subnet: 255.255.255.0
+      dns1: 8.8.8.8
+# ==========================================================
+# Persistență totaluri (litri)
+# - total_rece_l / total_calda_l sunt contuare odometrice
+#   (se restaurează la boot)
+# ==========================================================
+globals:
+  - id: total_rece_l
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'
+  - id: total_calda_l
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'
+
+# ==========================================================
+# Senzori expuși către HA (ID = name)
+# - Entități rezultate în HA (cu esphome.name=apm):
+#   sensor.apm_apa_rece_total_litri
+#   sensor.apm_apa_rece_total_m3
+#   sensor.apm_apa_calda_total_litri
+#   sensor.apm_apa_calda_total_m3
+# ==========================================================
+sensor:
+  # -------- Rece: total în L --------
+  - platform: template
+    id: apa_rece_total_litri
+    name: "apa_rece_total_litri"       # => sensor.apm_apa_rece_total_litri
+    unit_of_measurement: "L"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 0
+    lambda: |-
+      return (float) id(total_rece_l);
+
+  # -------- Rece: total în m³ --------
+  - platform: template
+    id: apa_rece_total_m3
+    name: "apa_rece_total_m3"          # => sensor.apm_apa_rece_total_m3
+    unit_of_measurement: "m³"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 3
+    lambda: |-
+      return (float) id(total_rece_l) * 0.001f;
+
+  # -------- Caldă: total în L --------
+  - platform: template
+    id: apa_calda_total_litri
+    name: "apa_calda_total_litri"      # => sensor.apm_apa_calda_total_litri
+    unit_of_measurement: "L"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 0
+    lambda: |-
+      return (float) id(total_calda_l);
+
+  # -------- Caldă: total în m³ --------
+  - platform: template
+    id: apa_calda_total_m3
+    name: "apa_calda_total_m3"         # => sensor.apm_apa_calda_total_m3
+    unit_of_measurement: "m³"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 3
+    lambda: |-
+      return (float) id(total_calda_l) * 0.001f;
+
+# ==========================================================
+# Intrări reed cu debounce „tare” (ID = name)
+# - Entități rezultate în HA:
+#   binary_sensor.apm_apa_rece_puls_live
+#   binary_sensor.apm_apa_calda_puls_live
+# ==========================================================
+binary_sensor:
+  # -------- Puls RECE (GPIO10) --------
+  - platform: gpio
+    id: apa_rece_puls_live
+    name: "apa_rece_puls_live"         # => binary_sensor.apm_apa_rece_puls_live
+    pin:
+      number: 3                       # ESP32-C3 GPIO10
+      mode:
+        input: true
+        pullup: true                   # pentru contact reed uscat
+      inverted: true                   # reed la GND => ON când se închide
+    filters:
+      - delayed_on: 15ms               # debounce pentru vibrațiile rotorului
+      - delayed_off: 15ms
+    on_press:
+      then:
+        - lambda: |-
+            // +1 litru per puls (1 impuls = 1 L)
+            id(total_rece_l) += 1;
+            id(apa_rece_total_litri).publish_state(id(total_rece_l));
+            id(apa_rece_total_m3).publish_state(id(total_rece_l) * 0.001f);
+
+  # -------- Puls CALDĂ (GPIO3) --------
+  - platform: gpio
+    id: apa_calda_puls_live
+    name: "apa_calda_puls_live"        # => binary_sensor.apm_apa_calda_puls_live
+    pin:
+      number: 10                        # ESP32-C3 GPIO3
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 15ms
+      - delayed_off: 15ms
+    on_press:
+      then:
+        - lambda: |-
+            id(total_calda_l) += 1;
+            id(apa_calda_total_litri).publish_state(id(total_calda_l));
+            id(apa_calda_total_m3).publish_state(id(total_calda_l) * 0.001f);
