@@ -23,3 +23,5 @@ MIT — see `LICENSE`.
 ## Story
 - 🇷🇴 [Povestea proiectului](STORY.ro.md)
 - 🇬🇧 [Build story](STORY.en.md)
+![ESP32-C3](images/esp32c3-photo.jpg)
+![Lovelace – Bubble Card](images/bubble-card-photo.jpg)
