@@ -1,0 +1,166 @@
+############################################################
+# ESPHome – ESP32-C3 mini water meters (ID = name, 1:1)
+# - Node prefix: apm  -> in HA: sensor.apm_..., binary_sensor.apm_...
+# - All entities use identical "id" and "name" for clarity
+# - Totals are kept in "globals" and published at boot
+############################################################
+
+esphome:
+  name: apm                              # prefix for entity_id in HA
+  friendly_name: ESP32MiniWaterMeters
+  min_version: 2025.5.0
+  name_add_mac_suffix: false
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          // Publish restored values so HA shows totals immediately
+          id(water_cold_total_liters).publish_state(id(total_cold_l));
+          id(water_cold_total_m3).publish_state(id(total_cold_l) * 0.001f);
+          id(water_hot_total_liters).publish_state(id(total_hot_l));
+          id(water_hot_total_m3).publish_state(id(total_hot_l) * 0.001f);
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# Clean logs; temporarily set INFO if debugging
+logger:
+  level: WARN
+  baud_rate: 0
+
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  manual_ip:
+      static_ip: 192.168.88.229     # <-- set a free address in your LAN
+      gateway: 192.168.88.2         # <-- your gateway
+      subnet: 255.255.255.0
+      dns1: 8.8.8.8
+
+# ==========================================================
+# Totals persistence (liters)
+# - total_cold_l / total_hot_l are odometer-like counters
+#   (restored at boot)
+# ==========================================================
+globals:
+  - id: total_cold_l
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'
+  - id: total_hot_l
+    type: uint32_t
+    restore_value: true
+    initial_value: '0'
+
+# ==========================================================
+# Sensors exposed to HA (ID = name)
+# - With esphome.name=apm these become:
+#   sensor.apm_water_cold_total_liters
+#   sensor.apm_water_cold_total_m3
+#   sensor.apm_water_hot_total_liters
+#   sensor.apm_water_hot_total_m3
+# ==========================================================
+sensor:
+  # -------- Cold: total in L --------
+  - platform: template
+    id: water_cold_total_liters
+    name: "water_cold_total_liters"
+    unit_of_measurement: "L"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 0
+    lambda: |-
+      return (float) id(total_cold_l);
+
+  # -------- Cold: total in m³ --------
+  - platform: template
+    id: water_cold_total_m3
+    name: "water_cold_total_m3"
+    unit_of_measurement: "m³"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 3
+    lambda: |-
+      return (float) id(total_cold_l) * 0.001f;
+
+  # -------- Hot: total in L --------
+  - platform: template
+    id: water_hot_total_liters
+    name: "water_hot_total_liters"
+    unit_of_measurement: "L"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 0
+    lambda: |-
+      return (float) id(total_hot_l);
+
+  # -------- Hot: total in m³ --------
+  - platform: template
+    id: water_hot_total_m3
+    name: "water_hot_total_m3"
+    unit_of_measurement: "m³"
+    device_class: water
+    state_class: total_increasing
+    update_interval: never
+    accuracy_decimals: 3
+    lambda: |-
+      return (float) id(total_hot_l) * 0.001f;
+
+# ==========================================================
+# Reed inputs with strong debounce (ID = name)
+# - Entities in HA:
+#   binary_sensor.apm_water_cold_pulse_live
+#   binary_sensor.apm_water_hot_pulse_live
+# ==========================================================
+binary_sensor:
+  # -------- COLD pulse (GPIO3) --------
+  - platform: gpio
+    id: water_cold_pulse_live
+    name: "water_cold_pulse_live"
+    pin:
+      number: 3                        # ESP32-C3 GPIO3
+      mode:
+        input: true
+        pullup: true                   # dry reed contact
+      inverted: true                   # reed to GND => ON when closed
+    filters:
+      - delayed_on: 15ms               # debounce for rotor vibration
+      - delayed_off: 15ms
+    on_press:
+      then:
+        - lambda: |-
+            // +1 liter per pulse (1 pulse = 1 L)
+            id(total_cold_l) += 1;
+            id(water_cold_total_liters).publish_state(id(total_cold_l));
+            id(water_cold_total_m3).publish_state(id(total_cold_l) * 0.001f);
+
+  # -------- HOT pulse (GPIO10) --------
+  - platform: gpio
+    id: water_hot_pulse_live
+    name: "water_hot_pulse_live"
+    pin:
+      number: 10                       # ESP32-C3 GPIO10
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on: 15ms
+      - delayed_off: 15ms
+    on_press:
+      then:
+        - lambda: |-
+            id(total_hot_l) += 1;
+            id(water_hot_total_liters).publish_state(id(total_hot_l));
+            id(water_hot_total_m3).publish_state(id(total_hot_l) * 0.001f);

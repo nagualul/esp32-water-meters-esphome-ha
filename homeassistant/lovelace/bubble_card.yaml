@@ -1,0 +1,39 @@
+type: horizontal-stack
+cards:
+  - type: custom:bubble-card
+    card_type: button
+    button_type: state
+    entity: sensor.water_hot_odometer
+    name: Hot water
+    card_layout: normal
+    state_color: true
+    show_state: true
+    tap_action:
+      action: navigate
+      navigation_path: "#waterhotdetails"
+    button_action:
+      tap_action:
+        action: navigate
+        navigation_path: "#waterhotdetails"
+    sub_button:
+      - entity: binary_sensor.apm_water_hot_pulse_live
+        show_state: false
+
+  - type: custom:bubble-card
+    card_type: button
+    button_type: state
+    entity: sensor.water_cold_odometer
+    name: Cold water
+    card_layout: normal
+    state_color: true
+    show_state: true
+    tap_action:
+      action: navigate
+      navigation_path: "#watercolddetails"
+    button_action:
+      tap_action:
+        action: navigate
+        navigation_path: "#watercolddetails"
+    sub_button:
+      - entity: binary_sensor.apm_water_cold_pulse_live
+        show_state: false

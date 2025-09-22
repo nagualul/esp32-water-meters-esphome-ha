@@ -1,0 +1,234 @@
+# packages/apometre_mini.yaml
+# =========================================================
+# Apometre (apă caldă + apă rece) – pe entitățile ESP (prefix apm_)
+#  - sensor.apm_apa_calda_total_litri / sensor.apm_apa_calda_total_m3
+#  - sensor.apm_apa_rece_total_litri  / sensor.apm_apa_rece_total_m3
+#  - binary_sensor.apm_apa_calda_puls_live / apm_apa_rece_puls_live
+#
+# Ce facem aici:
+#  - offset-uri pe m³ (pentru a alinia contorul digital la cel mecanic)
+#  - senzori template „corectați” (m³) + odometru text pentru UI
+#  - derivată L/min din total litri ESP
+#  - utility_meter (zi/lună) bazat pe valorile corectate
+# =========================================================
+
+# ---------- Ajustări (offset) pe m³ ----------
+input_number:
+  apa_calda_offset_m3:
+    name: "Apă caldă — Offset (m³)"
+    min: -10000
+    max: 10000
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:tune
+
+  apa_rece_offset_m3:
+    name: "Apă rece — Offset (m³)"
+    min: -10000
+    max: 10000
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:tune
+
+  # === Setare manuală odometru (m³) ===
+  # Introduci aici valoarea odometrului fizic și apeși butonul "Aplică" din pop-up.
+  apa_calda_setare_odometru_m3:
+    name: "Setare odometru Apă caldă (m³)"
+    min: 0
+    max: 99999
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:counter
+
+  apa_rece_setare_odometru_m3:
+    name: "Setare odometru Apă rece (m³)"
+    min: 0
+    max: 99999
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:counter
+
+script:
+  # --- Aplică setarea pentru APĂ CALDĂ ---
+  seteaza_odometru_apa_calda:
+    alias: "Setează odometru Apă caldă"
+    mode: single
+    sequence:
+      - variables:
+          tinta: "{{ states('input_number.apa_calda_setare_odometru_m3')|float(0) }}"
+          brut:  "{{ states('sensor.apm_apa_calda_total_m3')|float(0) }}"
+          offset_nou: "{{ (tinta - brut) | round(3) }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.apa_calda_offset_m3
+        data:
+          value: "{{ offset_nou }}"
+      # Calibrăm contoarele ca să nu explodeze "azi/lună" după salt
+      - service: utility_meter.calibrate
+        target:
+          entity_id:
+            - sensor.apa_calda_azi
+            - sensor.apa_calda_luna
+            - sensor.apa_total_azi
+            - sensor.apa_total_luna
+        data:
+          value: 0
+
+  # --- Aplică setarea pentru APĂ RECE ---
+  seteaza_odometru_apa_rece:
+    alias: "Setează odometru Apă rece"
+    mode: single
+    sequence:
+      - variables:
+          tinta: "{{ states('input_number.apa_rece_setare_odometru_m3')|float(0) }}"
+          brut:  "{{ states('sensor.apm_apa_rece_total_m3')|float(0) }}"
+          offset_nou: "{{ (tinta - brut) | round(3) }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.apa_rece_offset_m3
+        data:
+          value: "{{ offset_nou }}"
+      - service: utility_meter.calibrate
+        target:
+          entity_id:
+            - sensor.apa_rece_azi
+            - sensor.apa_rece_luna
+            - sensor.apa_total_azi
+            - sensor.apa_total_luna
+        data:
+          value: 0
+
+
+# ---------- Conversii, corecții, odometru ----------
+template:
+  - sensor:
+      # --- CALDĂ: m³ brut din ESP ---
+      - name: "Apă caldă total (m³)"
+        unique_id: apa_calda_total_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water
+        state: >
+          {{ states('sensor.apm_apa_calda_total_m3') | float(0) }}
+
+      # CALDĂ corectat = max(0, brut + offset)
+      - name: "Apă caldă total corectat (m³)"
+        unique_id: apa_calda_total_corectat_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water-check
+        state: >
+          {{ [
+              (states('sensor.apa_calda_total_m3') | float(0))
+              + (states('input_number.apa_calda_offset_m3') | float(0)),
+              0
+            ] | max | round(3) }}
+
+      # --- RECE: m³ brut din ESP ---
+      - name: "Apă rece total (m³)"
+        unique_id: apa_rece_total_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water
+        state: >
+          {{ states('sensor.apm_apa_rece_total_m3') | float(0) }}
+
+      # RECE corectat = max(0, brut + offset)
+      - name: "Apă rece total corectat (m³)"
+        unique_id: apa_rece_total_corectat_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water-check
+        state: >
+          {{ [
+              (states('sensor.apa_rece_total_m3') | float(0))
+              + (states('input_number.apa_rece_offset_m3') | float(0)),
+              0
+            ] | max | round(3) }}
+
+      # Total combinat (m³) din valorile corectate (caldă + rece)
+      - name: "Apă total (m³)"
+        unique_id: apa_total_m3
+        device_class: water
+        state_class: measurement
+        unit_of_measurement: "m³"
+        icon: mdi:water-plus
+        state: >
+          {{ (
+            states('sensor.apa_calda_total_corectat_m3') | float(0)
+            + states('sensor.apa_rece_total_corectat_m3')  | float(0)
+          ) | round(3) }}
+
+      # ------- ODOMETRE (STRING, pentru UI) -------
+      # Format 00000.000 m³ din valorile corectate (include offset)
+      - name: "apa_rece_odometru"
+        unique_id: apa_rece_odometru_v2
+        icon: mdi:counter
+        state: >
+          {% set v = states('sensor.apa_rece_total_corectat_m3')|float(0) %}
+          {% set v = iif(v < 0, 0, v) %}
+          {% set i = v|int %}
+          {% set d = ((v - i) * 1000) | round(0) | int %}
+          {% if d == 1000 %}{% set i = i + 1 %}{% set d = 0 %}{% endif %}
+          {{ '{:05d}.{:03d}'.format(i, d) }}
+
+      - name: "apa_calda_odometru"
+        unique_id: apa_calda_odometru_v2
+        icon: mdi:counter
+        state: >
+          {% set v = states('sensor.apa_calda_total_corectat_m3')|float(0) %}
+          {% set v = iif(v < 0, 0, v) %}
+          {% set i = v|int %}
+          {% set d = ((v - i) * 1000) | round(0) | int %}
+          {% if d == 1000 %}{% set i = i + 1 %}{% set d = 0 %}{% endif %}
+          {{ '{:05d}.{:03d}'.format(i, d) }}
+
+# ---------- L/min din total L (din senzori ESP) ----------
+# Derivate pe senzorii de litri din ESPHome (apm_*_total_litri).
+sensor:
+  - platform: derivative
+    source: sensor.apm_apa_calda_total_litri
+    name: "Apă caldă (L/min)"
+    unit_time: min
+    round: 2
+
+  - platform: derivative
+    source: sensor.apm_apa_rece_total_litri
+    name: "Apă rece (L/min)"
+    unit_time: min
+    round: 2
+
+# ---------- Utility meter (zi/lună) pe m³ corectate ----------
+# Observație: folosim valorile *corectate* (includ offset-ul).
+# Dacă vrei *fără* offset, schimbă sursele pe:
+#   sensor.apa_calda_total_m3 / sensor.apa_rece_total_m3
+utility_meter:
+  apa_calda_azi:
+    source: sensor.apa_calda_total_corectat_m3
+    cycle: daily
+  apa_calda_luna:
+    source: sensor.apa_calda_total_corectat_m3
+    cycle: monthly
+
+  apa_rece_azi:
+    source: sensor.apa_rece_total_corectat_m3
+    cycle: daily
+  apa_rece_luna:
+    source: sensor.apa_rece_total_corectat_m3
+    cycle: monthly
+
+  # Total zilnic/lunar (caldă+rece) din suma corectată
+  apa_total_azi:
+    source: sensor.apa_total_m3
+    cycle: daily
+  apa_total_luna:
+    source: sensor.apa_total_m3
+    cycle: monthly

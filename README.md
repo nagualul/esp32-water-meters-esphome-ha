@@ -25,3 +25,7 @@ MIT — see `LICENSE`.
 - 🇬🇧 [Build story](STORY.en.md)
 ![ESP32-C3](images/esp32c3-photo.jpg)
 ![Lovelace – Bubble Card](images/bubble-card-photo.jpg)
+
+
+> **Default language: English.** Romanian examples live under `examples/ro/`
+> and are **not** loaded by Home Assistant by default.

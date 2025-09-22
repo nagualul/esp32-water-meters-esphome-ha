@@ -1,0 +1,85 @@
+type: vertical-stack
+cards:
+  - type: custom:bubble-card
+    card_type: pop-up
+    hash: "#waterhotdetails"
+    button_type: name
+    show_header: false
+
+  - type: heading
+    heading_style: subtitle
+    heading: Hot water — details
+    icon: mdi:cup-water
+
+  - type: custom:bubble-card
+    card_type: button
+    button_type: state
+    entity: binary_sensor.apm_water_hot_pulse_live
+    name: Live pulse
+    show_state: true
+
+  - type: horizontal-stack
+    cards:
+      - type: custom:bubble-card
+        card_type: button
+        button_type: state
+        entity: sensor.water_hot_odometer
+        name: Odometer
+        show_state: true
+      - type: custom:bubble-card
+        card_type: button
+        button_type: state
+        entity: sensor.apm_water_hot_total_liters
+        name: ESP total (L)
+        show_state: true
+
+  - type: horizontal-stack
+    cards:
+      - type: custom:bubble-card
+        card_type: button
+        button_type: state
+        entity: sensor.water_hot_today
+        name: Today
+        show_state: true
+      - type: custom:bubble-card
+        card_type: button
+        button_type: state
+        entity: sensor.water_hot_month
+        name: This month
+        show_state: true
+
+  - type: horizontal-stack
+    cards:
+      - type: custom:bubble-card
+        card_type: button
+        button_type: state
+        entity: sensor.water_hot_l_min
+        name: Instant flow
+        show_state: true
+      - type: custom:bubble-card
+        card_type: button
+        button_type: state
+        entity: sensor.water_hot_total_corrected_m3
+        name: Total (m³)
+        show_state: true
+
+  - type: horizontal-stack
+    cards:
+      - type: custom:bubble-card
+        card_type: button
+        button_type: state
+        entity: input_number.water_hot_set_odometer_m3
+        name: Set odometer (m³)
+        show_state: true
+      - type: custom:bubble-card
+        card_type: button
+        button_type: name
+        name: Apply setting
+        icon: mdi:check
+        tap_action:
+          action: call-service
+          service: script.set_hot_water_odometer
+        button_action:
+          tap_action:
+            action: call-service
+            service: script.set_hot_water_odometer
