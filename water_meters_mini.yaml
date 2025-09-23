@@ -1,0 +1,250 @@
+# packages/water_meters_mini.yaml
+# =========================================================
+# Water meters (hot + cold) – based on ESP entities (prefix apm_)
+#  - sensor.apm_water_hot_total_liters / sensor.apm_water_hot_total_m3
+#  - sensor.apm_water_cold_total_liters / sensor.apm_water_cold_total_m3
+#  - binary_sensor.apm_water_hot_pulse_live / apm_water_cold_pulse_live
+#
+# What we do here:
+#  - per-channel m³ offsets (to match the mechanical odometer)
+#  - corrected template sensors (m³) + string odometers for UI
+#  - L/min derivative from ESP liters
+#  - daily/monthly utility_meter on corrected values
+# =========================================================
+
+# ---------- Offsets (m³) ----------
+input_number:
+  water_hot_offset_m3:
+    name: "Hot water — Offset (m³)"
+    min: -10000
+    max: 10000
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:tune
+
+  water_cold_offset_m3:
+    name: "Cold water — Offset (m³)"
+    min: -10000
+    max: 10000
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:tune
+
+  # === Manual odometer set (m³) ===
+  # Enter the mechanical odometer here, then press "Apply" in the pop-up.
+  water_hot_set_odometer_m3:
+    name: "Set odometer — Hot (m³)"
+    min: 0
+    max: 99999
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:counter
+
+  water_cold_set_odometer_m3:
+    name: "Set odometer — Cold (m³)"
+    min: 0
+    max: 99999
+    step: 0.001
+    unit_of_measurement: "m³"
+    mode: box
+    icon: mdi:counter
+
+script:
+  # --- Apply setting for HOT ---
+  set_hot_water_odometer:
+    alias: "Set hot water odometer"
+    mode: single
+    sequence:
+      - variables:
+          target: "{{ states('input_number.water_hot_set_odometer_m3')|float(0) }}"
+          raw:    "{{ states('sensor.apm_water_hot_total_m3')|float(0) }}"
+          new_offset: "{{ (target - raw) | round(3) }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.water_hot_offset_m3
+        data:
+          value: "{{ new_offset }}"
+      # Recalibrate utility meters to avoid spikes after the jump
+      - service: utility_meter.calibrate
+        target:
+          entity_id:
+            - sensor.water_hot_today
+            - sensor.water_hot_month
+            - sensor.water_total_today
+            - sensor.water_total_month
+        data:
+          value: 0
+
+  # --- Apply setting for COLD ---
+  set_cold_water_odometer:
+    alias: "Set cold water odometer"
+    mode: single
+    sequence:
+      - variables:
+          target: "{{ states('input_number.water_cold_set_odometer_m3')|float(0) }}"
+          raw:    "{{ states('sensor.apm_water_cold_total_m3')|float(0) }}"
+          new_offset: "{{ (target - raw) | round(3) }}"
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.water_cold_offset_m3
+        data:
+          value: "{{ new_offset }}"
+      - service: utility_meter.calibrate
+        target:
+          entity_id:
+            - sensor.water_cold_today
+            - sensor.water_cold_month
+            - sensor.water_total_today
+            - sensor.water_total_month
+        data:
+          value: 0
+
+
+# ---------- Conversions, corrections, odometers ----------
+template:
+  - sensor:
+      # --- HOT: raw m³ from ESP ---
+      - name: "water_hot_total_m3"
+        unique_id: water_hot_total_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water
+        availability: >
+          {{ has_value('sensor.apm_water_hot_total_m3') }}
+        state: >
+          {{ states('sensor.apm_water_hot_total_m3') | float }}
+
+      # HOT corrected (m³) = max(0, raw + offset)
+      - name: "water_hot_total_corrected_m3"
+        unique_id: water_hot_total_corrected_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water-check
+        availability: >
+          {{ has_value('sensor.water_hot_total_m3') and
+             has_value('input_number.water_hot_offset_m3') }}
+        state: >
+          {{ [
+              (states('sensor.water_hot_total_m3') | float) +
+              (states('input_number.water_hot_offset_m3') | float(0)),
+              0
+            ] | max | round(3) }}
+
+      # --- COLD: raw m³ from ESP ---
+      - name: "water_cold_total_m3"
+        unique_id: water_cold_total_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water
+        availability: >
+          {{ has_value('sensor.apm_water_cold_total_m3') }}
+        state: >
+          {{ states('sensor.apm_water_cold_total_m3') | float }}
+
+      # COLD corrected (m³) = max(0, raw + offset)
+      - name: "water_cold_total_corrected_m3"
+        unique_id: water_cold_total_corrected_m3
+        device_class: water
+        state_class: total_increasing
+        unit_of_measurement: "m³"
+        icon: mdi:water-check
+        availability: >
+          {{ has_value('sensor.water_cold_total_m3') and
+             has_value('input_number.water_cold_offset_m3') }}
+        state: >
+          {{ [
+              (states('sensor.water_cold_total_m3') | float) +
+              (states('input_number.water_cold_offset_m3') | float(0)),
+              0
+            ] | max | round(3) }}
+
+      # --- Combined corrected total (m³) ---
+      - name: "water_total_m3"
+        unique_id: water_total_m3
+        device_class: water
+        state_class: measurement
+        unit_of_measurement: "m³"
+        icon: mdi:water-plus
+        availability: >
+          {{ has_value('sensor.water_hot_total_corrected_m3') and
+             has_value('sensor.water_cold_total_corrected_m3') }}
+        state: >
+          {{ (
+            states('sensor.water_hot_total_corrected_m3') | float(0) +
+            states('sensor.water_cold_total_corrected_m3') | float(0)
+          ) | round(3) }}
+          
+      # ODOMETERS (string)
+      - name: "water_cold_odometer"
+        unique_id: water_cold_odometer_v2
+        icon: mdi:counter
+        availability: >
+          {{ has_value('sensor.water_cold_total_corrected_m3') }}
+        state: >
+          {% set v = states('sensor.water_cold_total_corrected_m3')|float(0) %}
+          {% set v = iif(v < 0, 0, v) %}
+          {% set i = v|int %}
+          {% set d = ((v - i) * 1000) | round(0) | int %}
+          {% if d == 1000 %}{% set i = i + 1 %}{% set d = 0 %}{% endif %}
+          {{ '{:05d}.{:03d}'.format(i, d) }}
+
+      - name: "water_hot_odometer"
+        unique_id: water_hot_odometer_v2
+        icon: mdi:counter
+        availability: >
+          {{ has_value('sensor.water_hot_total_corrected_m3') }}
+        state: >
+          {% set v = states('sensor.water_hot_total_corrected_m3')|float(0) %}
+          {% set v = iif(v < 0, 0, v) %}
+          {% set i = v|int %}
+          {% set d = ((v - i) * 1000) | round(0) | int %}
+          {% if d == 1000 %}{% set i = i + 1 %}{% set d = 0 %}{% endif %}
+          {{ '{:05d}.{:03d}'.format(i, d) }}
+
+# ---------- L/min from total liters (ESP sensors) ----------
+# Derivatives based on ESPHome liter sensors (apm_*_total_liters).
+sensor:
+  - platform: derivative
+    source: sensor.apm_water_hot_total_liters
+    name: "water_hot_l_min"
+    unit_time: min
+    round: 2
+
+  - platform: derivative
+    source: sensor.apm_water_cold_total_liters
+    name: "water_cold_l_min"
+    unit_time: min
+    round: 2
+
+# ---------- Utility meter (daily/monthly) on corrected m³ ----------
+# Note: using *corrected* values (includes offset).
+# If you want *raw*, switch sources to:
+#   sensor.water_hot_total_m3 / sensor.water_cold_total_m3
+utility_meter:
+  water_hot_today:
+    source: sensor.water_hot_total_corrected_m3
+    cycle: daily
+  water_hot_month:
+    source: sensor.water_hot_total_corrected_m3
+    cycle: monthly
+
+  water_cold_today:
+    source: sensor.water_cold_total_corrected_m3
+    cycle: daily
+  water_cold_month:
+    source: sensor.water_cold_total_corrected_m3
+    cycle: monthly
+
+  # Daily/monthly total (hot+cold) from corrected sum
+  water_total_today:
+    source: sensor.water_total_m3
+    cycle: daily
+  water_total_month:
+    source: sensor.water_total_m3
+    cycle: monthly
