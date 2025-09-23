@@ -106,71 +106,86 @@ script:
 # ---------- Conversions, corrections, odometers ----------
 template:
   - sensor:
-      # --- HOT raw m³ from ESP ---
+      # --- HOT: raw m³ from ESP ---
       - name: "water_hot_total_m3"
         unique_id: water_hot_total_m3
         device_class: water
         state_class: total_increasing
         unit_of_measurement: "m³"
         icon: mdi:water
+        availability: >
+          {{ has_value('sensor.apm_water_hot_total_m3') }}
         state: >
-          {{ states('sensor.apm_water_hot_total_m3') | float(0) }}
+          {{ states('sensor.apm_water_hot_total_m3') | float }}
 
-      # HOT corrected
+      # HOT corrected (m³) = max(0, raw + offset)
       - name: "water_hot_total_corrected_m3"
         unique_id: water_hot_total_corrected_m3
         device_class: water
         state_class: total_increasing
         unit_of_measurement: "m³"
         icon: mdi:water-check
+        availability: >
+          {{ has_value('sensor.water_hot_total_m3') and
+             has_value('input_number.water_hot_offset_m3') }}
         state: >
           {{ [
-              (states('sensor.water_hot_total_m3') | float(0)) +
+              (states('sensor.water_hot_total_m3') | float) +
               (states('input_number.water_hot_offset_m3') | float(0)),
               0
             ] | max | round(3) }}
 
-      # --- COLD raw m³ from ESP ---
+      # --- COLD: raw m³ from ESP ---
       - name: "water_cold_total_m3"
         unique_id: water_cold_total_m3
         device_class: water
         state_class: total_increasing
         unit_of_measurement: "m³"
         icon: mdi:water
+        availability: >
+          {{ has_value('sensor.apm_water_cold_total_m3') }}
         state: >
-          {{ states('sensor.apm_water_cold_total_m3') | float(0) }}
+          {{ states('sensor.apm_water_cold_total_m3') | float }}
 
-      # COLD corrected
+      # COLD corrected (m³) = max(0, raw + offset)
       - name: "water_cold_total_corrected_m3"
         unique_id: water_cold_total_corrected_m3
         device_class: water
         state_class: total_increasing
         unit_of_measurement: "m³"
         icon: mdi:water-check
+        availability: >
+          {{ has_value('sensor.water_cold_total_m3') and
+             has_value('input_number.water_cold_offset_m3') }}
         state: >
           {{ [
-              (states('sensor.water_cold_total_m3') | float(0)) +
+              (states('sensor.water_cold_total_m3') | float) +
               (states('input_number.water_cold_offset_m3') | float(0)),
               0
             ] | max | round(3) }}
 
-      # Combined corrected total
+      # --- Combined corrected total (m³) ---
       - name: "water_total_m3"
         unique_id: water_total_m3
         device_class: water
         state_class: measurement
         unit_of_measurement: "m³"
         icon: mdi:water-plus
+        availability: >
+          {{ has_value('sensor.water_hot_total_corrected_m3') and
+             has_value('sensor.water_cold_total_corrected_m3') }}
         state: >
           {{ (
             states('sensor.water_hot_total_corrected_m3') | float(0) +
             states('sensor.water_cold_total_corrected_m3') | float(0)
           ) | round(3) }}
-
+          
       # ODOMETERS (string)
       - name: "water_cold_odometer"
         unique_id: water_cold_odometer_v2
         icon: mdi:counter
+        availability: >
+          {{ has_value('sensor.water_cold_total_corrected_m3') }}
         state: >
           {% set v = states('sensor.water_cold_total_corrected_m3')|float(0) %}
           {% set v = iif(v < 0, 0, v) %}
@@ -182,6 +197,8 @@ template:
       - name: "water_hot_odometer"
         unique_id: water_hot_odometer_v2
         icon: mdi:counter
+        availability: >
+          {{ has_value('sensor.water_hot_total_corrected_m3') }}
         state: >
           {% set v = states('sensor.water_hot_total_corrected_m3')|float(0) %}
           {% set v = iif(v < 0, 0, v) %}
